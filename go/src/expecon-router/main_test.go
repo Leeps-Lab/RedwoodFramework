@@ -145,7 +145,7 @@ func TestSync(t *testing.T) {
 func TestIntegration(t *testing.T) {
 	flushDB()
 	setupRouter()
-	floodRouter(1, "foo", "bar", 100000)
+	floodRouter(1, "synchroized_stopwatch", "{real: 'test', data: [1, 2, 3, 4, 5, {x: 43, y:63}, 7, 8], selected: 4000}", 200000)
 }
 
 func BenchmarkThroughput(b *testing.B) {

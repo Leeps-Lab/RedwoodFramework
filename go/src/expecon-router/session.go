@@ -15,6 +15,7 @@ type Session struct {
     nonce             string
     listeners         map[string]*Listener
     subjects          map[string]*Subject
+    messages          []*Msg
     last_state_update map[string]map[string]*Msg
     last_cfg          *Msg
 }
@@ -28,9 +29,20 @@ func NewSession(r *Router, instance string, id int) (s *Session) {
         nonce:             uuid(),
         listeners:         make(map[string]*Listener),
         subjects:          make(map[string]*Subject),
+        messages:          make([]*Msg, 0),
         last_state_update: make(map[string]map[string]*Msg),
         last_cfg:          nil,
     }
+
+    // load messages from Redis
+    messages, err := s.router.db.Messages(SessionID{instance, id})
+    if err != nil {
+        log.Fatal("Could not load messages for session %d:%d", instance, id)
+    }
+    for msg := range messages {
+        s.messages = append(s.messages, msg)
+    }
+
     return s
 }
 
@@ -65,6 +77,9 @@ func (s *Session) Receive(msg *Msg) {
     if err != nil {
         log.Fatal(err) // not really a good idea to fatal here
     }
+        // Save to internal storage
+        s.messages = append(s.messages, msg)
+
     for _, listener := range s.listeners {
         if listener.match(s, msg) {
             listener.Send(bytes)

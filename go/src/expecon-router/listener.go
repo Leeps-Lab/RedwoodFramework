@@ -78,11 +78,12 @@ func (l *Listener) ReceiveLoop() {
             period := int(v["period"].(float64))
             msgs := make([]*Msg, 0)
 
-            allMessages, err := l.router.db.Messages(SessionID{l.instance, l.session_id})
-            if err != nil {
-                log.Fatal(err)
-            }
-            for msg := range allMessages {
+            // allMessages, err := l.router.db.Messages(SessionID{l.instance, l.session_id})
+            // if err != nil {
+            //     log.Fatal(err)
+            // }
+            session := l.router.Session(l.instance, l.session_id)
+            for _, msg := range session.messages {
                 if period == 0 || msg.Period == period {
                     msgs = append(msgs, msg)
                 }
@@ -109,11 +110,11 @@ func (l *Listener) Sync() {
     }
     l.encoder.Encode(queueStartMessage);
 
-    messages, err := l.router.db.Messages(SessionID{l.instance, l.session_id})
+    /*messages, err := l.router.db.Messages(SessionID{l.instance, l.session_id})
     if err != nil {
         log.Fatal(err)
-    }
-    for msg := range messages {
+    }*/
+    for _, msg := range session.messages {
         if l.match(session, msg) {
             l.encoder.Encode(&msg)
         }
