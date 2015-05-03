@@ -28,6 +28,15 @@ func (s SessionID) ObjectsKey() string {
     return fmt.Sprintf("session_objs:%s:%d", s.instance, s.id)
 }
 
+type PeriodID struct {
+    session SessionID
+    period  int
+}
+
+func (p PeriodID) Key() string {
+    return fmt.Sprintf("session:%s:%d:%d", p.session.instance, p.session.id, p.period)
+}
+
 type SessionObjectID struct {
     objectType string
     sessionID  SessionID
@@ -39,7 +48,7 @@ func (s SessionObjectID) Key() string {
 }
 
 type Database struct {
-    client *redis.Client
+    client        *redis.Client
 }
 
 func NewDatabase(redisHost string, redisDB int) (database *Database) {
@@ -218,13 +227,55 @@ func (db *Database) Messages(sessionID SessionID) (chan *Msg, error) {
     return messages, nil
 }
 
+// gets messages for this period and all get/set messages
+func (db *Database) PeriodMessages(periodID PeriodID) (chan *Msg, error) {
+    // retrieve messages in smaller blocks to keep peak memory usage
+    // under control when the message digest gets too large
+    blockSize := 1000
+    periodKey := periodID.Key()
+    messageCount, err := db.client.Llen(periodKey)
+    if err != nil {
+        return nil, err
+    }
+
+    messages := make(chan *Msg, blockSize)
+
+    log.Printf("Fetching %d messages from Redis into %p", messageCount, messages)
+    go func() {
+        defer close(messages)
+        for i := 0; i < messageCount; i += blockSize {
+            limit := i + blockSize
+            if limit >= messageCount {
+                limit = messageCount
+            }
+            msgData, err := db.client.Lrange(periodKey, i, limit - 1)
+            if err != nil {
+                return
+            }
+            for _, bytes := range msgData {
+                var msg Msg
+                if err = json.Unmarshal(bytes, &msg); err != nil {
+                    return
+                }
+                messages <- &msg
+            }
+        }
+    }()
+
+    return messages, nil
+}
+
 /* Saving Messages */
 
 func (db *Database) SaveMessage(msg *Msg) (error) {
-    key := fmt.Sprintf("session:%s:%d", msg.Instance, msg.Session)
+    sessionID := SessionID{msg.Instance, msg.Session}
+    periodID := PeriodID{sessionID, msg.Period}
+    key := sessionID.Key();
+
     db.client.Sadd("sessions", []byte(key))
     if b, err := json.Marshal(msg); err == nil {
         err := db.client.Rpush(key, b)
+        err = db.client.Rpush(periodID.Key(), b)
         return err
     }
     return nil

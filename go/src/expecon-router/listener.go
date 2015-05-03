@@ -109,7 +109,21 @@ func (l *Listener) Sync() {
     }
     l.encoder.Encode(queueStartMessage);
 
-    messages, err := l.router.db.Messages(SessionID{l.instance, l.session_id})
+    //messages, err := l.router.db.Messages(SessionID{l.instance, l.session_id})
+
+    // retreive and send messages for dummy period 0
+    messages, err := l.router.db.PeriodMessages(PeriodID{SessionID{l.instance, l.session_id}, 0})
+    if err != nil {
+        log.Fatal(err)
+    }
+    for msg := range messages {
+        if l.match(session, msg) {
+            l.encoder.Encode(&msg)
+        }
+    }
+
+    // retreive and send messages for this period
+    messages, err = l.router.db.PeriodMessages(PeriodID{SessionID{l.instance, l.session_id}, l.subject.period})
     if err != nil {
         log.Fatal(err)
     }
