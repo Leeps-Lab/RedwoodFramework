@@ -121,14 +121,29 @@ func (db *Database) SessionObjectIDs(sessionID SessionID) ([]SessionObjectID, er
 }
 
 func (db *Database) DeleteSession(sessionID SessionID) (error) {
+    // delete session messages
     _, err := db.client.Del(sessionID.Key())
     if err != nil {
         return err
     }
+
+    // delete session messages
+    var keys []string;
+    keys, err = db.client.Keys(sessionID.Key() + ":*")
+    for _, key := range keys {
+        _, err := db.client.Del(key)
+        if err != nil {
+            return err
+        }   
+    }
+
+    // delete session from sessions set
     _, err = db.client.Srem("sessions", []byte(sessionID.Key()))
     if err != nil {
         return err
     }
+
+    // delete session objects
     return db.DeleteSessionObjects(sessionID)
 }
 
