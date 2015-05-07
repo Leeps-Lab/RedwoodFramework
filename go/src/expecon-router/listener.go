@@ -114,7 +114,7 @@ func (l *Listener) Sync() {
         log.Fatal(err)
     }
     for msg := range messages {
-        if l.match(session, msg) {
+        if l.Match(session, msg) {
             l.encoder.Encode(&msg)
         }
     }
@@ -128,32 +128,24 @@ func (l *Listener) Sync() {
     log.Printf("Finished sync for %p", l)
 }
 
-func (l *Listener) match(session *Session, msg *Msg) bool {
-    if l.subject.name == "listener" {
-        return true
-    }
-    // keeping this for backwards compatibility reasons
-    // otherwise admin doesn't receive everything
-    // needed for redwood 2 admin pause controls and other things
-    if l.subject.name == "admin" {
-        return true
-    }
-    //
+func (l *Listener) Match(session *Session, msg *Msg) bool {
     control :=
         msg.Key == "__register__" ||
-            msg.Key == "__pause__" ||
-            msg.Key == "__reset__" ||
-            msg.Key == "__delete__" ||
-            msg.Key == "__error__"
-    session_state :=
-        msg.Key == "__set_period__" ||
-            msg.Key == "__set_group__" ||
-            msg.Key == "__set_page__"
+        msg.Key == "__pause__"    ||
+        msg.Key == "__reset__"    ||
+        msg.Key == "__delete__"   ||
+        msg.Key == "__error__"
+
+    is_listener := l.subject.name == "listener"
     is_admin := l.subject.name == "admin"
+
     same_period := msg.Period == l.subject.period || msg.Period == 0
     same_group := msg.Group == l.subject.group || msg.Group == 0
     last_state_update_msg := session.last_state_update[msg.Key][msg.Sender]
     is_relevant := !msg.StateUpdate || msg.IdenticalTo(last_state_update_msg)
 
-    return control || (session_state && is_relevant && (is_admin || (same_period && same_group))) || (same_period && same_group && is_relevant)
+    return control     ||
+           is_admin    ||
+           is_listener || 
+           (same_period && same_group && is_relevant)
 }

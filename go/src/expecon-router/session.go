@@ -66,7 +66,7 @@ func (s *Session) Receive(msg *Msg) {
         log.Fatal(err) // not really a good idea to fatal here
     }
     for _, listener := range s.listeners {
-        if listener.match(s, msg) {
+        if listener.Match(s, msg) {
             listener.Send(bytes)
         }
     }
