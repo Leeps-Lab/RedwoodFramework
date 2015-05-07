@@ -20,21 +20,13 @@ type Msg struct {
     Value       interface{}
 }
 
-func (msg *Msg) MatchesPeriod(session *Session, period int) bool {
-    control :=
-        msg.Key == "__register__" ||
-        msg.Key == "__pause__"    ||
-        msg.Key == "__reset__"    ||
-        msg.Key == "__delete__"   ||
-        msg.Key == "__error__"
-
-    same_period := msg.Period >= period || msg.Period == 0
-    last_state_update_msg := session.last_state_update[msg.Key][msg.Sender]
-    is_relevant := !msg.StateUpdate || msg.IdenticalTo(last_state_update_msg)
-
-    return control || (same_period && is_relevant)
+func (msg *Msg) IsControlMessage() bool {
+  return msg.Key == "__register__" ||
+         msg.Key == "__pause__"    ||
+         msg.Key == "__reset__"    ||
+         msg.Key == "__delete__"   ||
+         msg.Key == "__error__"
 }
-
 
 func (msg *Msg) IdenticalTo(otherMsg *Msg) bool {
     // Test equality of all properties except for the ack channel

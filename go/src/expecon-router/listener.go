@@ -32,6 +32,11 @@ func NewListener(router *Router, instance string, session_id int, subject *Subje
     return listener;
 }
 
+func (l *Listener) ReceivesAllMessages() bool {
+    return l.subject.name == "listener" ||
+           l.subject.name == "admin"
+}
+
 // send msg to the given Listener
 // If it fails for any reason, l is added to the remove queue.
 func (l *Listener) Send(rawMessage []byte) {
@@ -109,21 +114,22 @@ func (l *Listener) Sync() {
     }
     l.encoder.Encode(queueStartMessage);
 
-    if l.subject.name == "admin" || l.subject.name == "listener" {
+    if l.ReceivesAllMessages() {
         messages, err := l.router.db.Messages(SessionID{l.instance, l.session_id})
         if err != nil {
             log.Fatal(err)
         }
         for msg := range messages {
-            if l.Match(session, msg) {
+            if l.MatchesMessage(msg) {
                 l.encoder.Encode(&msg)
             }
         }
     } else {
-        messages := session.msg_cache
         log.Printf("Syncing using message cache (%d messages)", len(session.msg_cache))
+
+        messages := session.msg_cache
         for _, msg := range messages {
-            if l.Match(session, msg) {
+            if l.MatchesMessage(msg) {
                 l.encoder.Encode(&msg)
             }
         }
@@ -138,24 +144,15 @@ func (l *Listener) Sync() {
     log.Printf("Finished sync for %p", l)
 }
 
-func (l *Listener) Match(session *Session, msg *Msg) bool {
-    control :=
-        msg.Key == "__register__" ||
-        msg.Key == "__pause__"    ||
-        msg.Key == "__reset__"    ||
-        msg.Key == "__delete__"   ||
-        msg.Key == "__error__"
-
-    is_listener := l.subject.name == "listener"
-    is_admin := l.subject.name == "admin"
+func (l *Listener) MatchesMessage(msg *Msg) bool {
+    session := l.router.Session(l.instance, l.session_id)
 
     same_period := msg.Period == l.subject.period || msg.Period == 0
     same_group := msg.Group == l.subject.group || msg.Group == 0
     last_state_update_msg := session.last_state_update[msg.Key][msg.Sender]
     is_relevant := !msg.StateUpdate || msg.IdenticalTo(last_state_update_msg)
 
-    return control     ||
-           is_admin    ||
-           is_listener || 
+    return msg.IsControlMessage()  ||
+           l.ReceivesAllMessages() ||
            (same_period && same_group && is_relevant)
 }

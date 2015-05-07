@@ -5,6 +5,7 @@ import(
     "log"
     "encoding/json"
     "fmt"
+    "math"
 )
 
 type Session struct {
@@ -75,18 +76,14 @@ func (s *Session) Receive(msg *Msg) {
         log.Fatal(err) // not really a good idea to fatal here
     }
     for _, listener := range s.listeners {
-        if listener.Match(s, msg) {
+        if listener.MatchesMessage(msg) {
             listener.Send(bytes)
         }
     }
 
     // clean cache if necessary
     should_clean := true
-    oldest_subject_period := 9999
     for _, subject := range s.subjects {
-        if subject.period < oldest_subject_period {
-            oldest_subject_period = subject.period
-        }
 
         is_listener := subject.name == "admin" ||
                        subject.name == "listener"
@@ -95,11 +92,26 @@ func (s *Session) Receive(msg *Msg) {
             should_clean = false
         }
     }
-    s.oldest_period = oldest_subject_period
+    s.oldest_period = s.oldestSubjectPeriod()
 
     if should_clean {
         s.CleanCache()
     }
+}
+
+func (s *Session) oldestSubjectPeriod() int {
+    oldest_subject_period := math.MaxInt32
+
+    for _, subject := range s.subjects {
+        if subject.period < oldest_subject_period {
+            oldest_subject_period = subject.period
+        }
+    }
+    if oldest_subject_period == math.MaxInt32 {
+        oldest_subject_period = 0
+    }
+
+    return oldest_subject_period
 }
 
 func (s *Session) CacheMessage(msg *Msg) {
@@ -111,11 +123,19 @@ func (s *Session) CleanCache() {
     log.Printf("(Moved to period %d) %p...", s.oldest_period, s)
     new_cache := make([]*Msg, 0)
     for _, msg := range s.msg_cache {
-        if msg.MatchesPeriod(s, s.oldest_period) {
+        if s.MatchesMessage(msg) {
             new_cache = append(new_cache, msg)
         }
     }
     s.msg_cache = new_cache
+}
+
+func (s *Session) MatchesMessage(msg *Msg) bool {
+    same_period := msg.Period >= s.oldest_period || msg.Period == 0
+    last_state_update_msg := s.last_state_update[msg.Key][msg.Sender]
+    is_relevant := !msg.StateUpdate || msg.IdenticalTo(last_state_update_msg)
+
+    return msg.IsControlMessage() || (same_period && is_relevant)
 }
 
 func (s *Session) Reset() {
