@@ -34,7 +34,6 @@ func NewRouter(redis_host string, redis_db int) (r *Router) {
     r.sessions = make(map[string]map[int]*Session)
 
     r.db = NewDatabase(redis_host, redis_db)
-    // populate the in-memory queues with persisted redis data
 
     sessionIDs, err := r.db.SessionIDs()
     if err != nil {
@@ -45,6 +44,8 @@ func NewRouter(redis_host string, redis_db int) (r *Router) {
     for _, sessionID := range sessionIDs {
 
         session := r.Session(sessionID.instance, sessionID.id)
+
+        // Load session objects
         sessionObjectIDs, err := r.db.SessionObjectIDs(sessionID)
         if err != nil {
             log.Print(err)
@@ -77,6 +78,13 @@ func NewRouter(redis_host string, redis_db int) (r *Router) {
                 session.last_cfg = config
             }
         }
+
+        // Load session messages
+        messages, err := r.db.Messages(sessionID);
+        for msg := range messages {
+            session.CacheMessage(msg)
+        }
+        session.CleanCache()
     }
     return r
 }

@@ -109,13 +109,23 @@ func (l *Listener) Sync() {
     }
     l.encoder.Encode(queueStartMessage);
 
-    messages, err := l.router.db.Messages(SessionID{l.instance, l.session_id})
-    if err != nil {
-        log.Fatal(err)
-    }
-    for msg := range messages {
-        if l.Match(session, msg) {
-            l.encoder.Encode(&msg)
+    if l.subject.name == "admin" || l.subject.name == "listener" {
+        messages, err := l.router.db.Messages(SessionID{l.instance, l.session_id})
+        if err != nil {
+            log.Fatal(err)
+        }
+        for msg := range messages {
+            if l.Match(session, msg) {
+                l.encoder.Encode(&msg)
+            }
+        }
+    } else {
+        messages := session.msg_cache
+        log.Printf("Syncing using message cache (%d messages)", len(session.msg_cache))
+        for _, msg := range messages {
+            if l.Match(session, msg) {
+                l.encoder.Encode(&msg)
+            }
         }
     }
 
