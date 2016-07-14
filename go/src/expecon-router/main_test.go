@@ -1,14 +1,15 @@
 package main
 
 import (
-	"websocket"
-	"redis-go"
 	"encoding/json"
-	"log"
-	"time"
-	"testing"
 	"fmt"
+	"log"
 	"sync"
+	"testing"
+	"time"
+	"websocket"
+
+	"gopkg.in/redis.v4"
 )
 
 var once sync.Once
@@ -16,15 +17,18 @@ var redisHost = "127.0.0.1:6379"
 var redisDB = 1
 
 func flushDB() {
-	client := &redis.Client{Addr: redisHost, Db: redisDB}
-	client.Flush(false)
+	client := redis.NewClient(&redis.Options{
+		Addr: redisHost,
+		DB:   redisDB,
+	})
+	client.FlushDb()
 }
 
 func setupRouter() {
 	once.Do(func() {
 		ready := make(chan bool)
 		go StartUp(redisHost, redisDB, 8080, ready)
-		<- ready
+		<-ready
 	})
 }
 
@@ -46,8 +50,8 @@ func setupClient(clientID int) (*websocket.Conn, error) {
 	}
 }
 
-func floodRouter(subjectID int, key string, value string, count int) (error) {
-	conn, err := setupClient(subjectID); 
+func floodRouter(subjectID int, key string, value string, count int) error {
+	conn, err := setupClient(subjectID)
 	if err != nil {
 		return err
 	}
@@ -78,23 +82,23 @@ func floodRouter(subjectID int, key string, value string, count int) (error) {
 	e := json.NewEncoder(conn)
 	for i := 0; i < count; i++ {
 		msg := Msg{
-			Instance: "redwood",
-			Session: 1,
-			Nonce: nonce,
-			Sender: "1",
-			Period: 0,
-			Group: 0,
+			Instance:    "redwood",
+			Session:     1,
+			Nonce:       nonce,
+			Sender:      "1",
+			Period:      0,
+			Group:       0,
 			StateUpdate: false,
-			Time: 0,
-			ClientTime: 0,
-			Key: key,
-			Value: value,
+			Time:        0,
+			ClientTime:  0,
+			Key:         key,
+			Value:       value,
 		}
 		if err := e.Encode(msg); err != nil {
 			return err
 		}
 	}
-	<- finished_chan
+	<-finished_chan
 	return nil
 }
 
@@ -109,7 +113,7 @@ func TestSync(t *testing.T) {
 	connection_count := 10
 	finished := make(chan *websocket.Conn)
 	for i := 1; i <= connection_count; i++ {
-		conn, err := setupClient(i); 
+		conn, err := setupClient(i)
 		go func() {
 			if err != nil {
 				t.Fatal(err)
@@ -129,7 +133,7 @@ func TestSync(t *testing.T) {
 			}()
 			// Wait for entire message digest to sync
 			for j := 1; j <= msg_count; j++ {
-				<- sync_messages
+				<-sync_messages
 			}
 			finished <- conn
 		}()
@@ -137,7 +141,7 @@ func TestSync(t *testing.T) {
 
 	// Drain finished channel
 	for i := 1; i <= connection_count; i++ {
-		conn := <- finished
+		conn := <-finished
 		conn.Close()
 	}
 }
