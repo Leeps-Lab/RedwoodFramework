@@ -1,14 +1,14 @@
 package main
 
 import (
-	"websocket"
-	"redis-go"
 	"encoding/json"
-	"log"
-	"time"
-	"testing"
 	"fmt"
+	"log"
+	"redis-go"
 	"sync"
+	"testing"
+	"time"
+	"websocket"
 )
 
 var once sync.Once
@@ -24,7 +24,7 @@ func setupRouter() {
 	once.Do(func() {
 		ready := make(chan bool)
 		go StartUp(redisHost, redisDB, 8080, ready)
-		<- ready
+		<-ready
 	})
 }
 
@@ -46,8 +46,8 @@ func setupClient(clientID int) (*websocket.Conn, error) {
 	}
 }
 
-func floodRouter(subjectID int, key string, value string, count int) (error) {
-	conn, err := setupClient(subjectID); 
+func floodRouter(subjectID int, key string, value string, count int) error {
+	conn, err := setupClient(subjectID)
 	if err != nil {
 		return err
 	}
@@ -77,24 +77,28 @@ func floodRouter(subjectID int, key string, value string, count int) (error) {
 	nonce := <-nonce_chan
 	e := json.NewEncoder(conn)
 	for i := 0; i < count; i++ {
+		state_update := false
+		if i%100 == 0 {
+			state_update = true
+		}
 		msg := Msg{
-			Instance: "redwood",
-			Session: 1,
-			Nonce: nonce,
-			Sender: "1",
-			Period: 0,
-			Group: 0,
-			StateUpdate: false,
-			Time: 0,
-			ClientTime: 0,
-			Key: key,
-			Value: value,
+			Instance:    "redwood",
+			Session:     1,
+			Nonce:       nonce,
+			Sender:      fmt.Sprintf("%d", subjectID),
+			Period:      0,
+			Group:       0,
+			StateUpdate: state_update,
+			Time:        0,
+			ClientTime:  0,
+			Key:         key,
+			Value:       value,
 		}
 		if err := e.Encode(msg); err != nil {
 			return err
 		}
 	}
-	<- finished_chan
+	<-finished_chan
 	return nil
 }
 
@@ -102,42 +106,34 @@ func floodRouter(subjectID int, key string, value string, count int) (error) {
 func TestSync(t *testing.T) {
 	flushDB()
 	setupRouter()
-	// Fill database with 1000 messages
-	msg_count := 50000
-	floodRouter(1, "sync_test", "placeholder", msg_count)
+	// Fill database with messages
+	msg_count := 10
+	connection_count := 1000
+	for i := 1; i <= connection_count; i++ {
+		floodRouter(i, "sync_test", "placeholder", msg_count)
+	}
 	// Make client connections
-	connection_count := 10
 	finished := make(chan *websocket.Conn)
 	for i := 1; i <= connection_count; i++ {
-		conn, err := setupClient(i); 
-		go func() {
+		go func(i int) {
+			conn, err := setupClient(i)
 			if err != nil {
 				t.Fatal(err)
 			}
-			sync_messages := make(chan int)
-			go func() {
-				d := json.NewDecoder(conn)
-				for {
-					var msg Msg
-					if err := d.Decode(&msg); err != nil {
-						return
-					}
-					if msg.Key == "sync_test" {
-						sync_messages <- 1
-					}
+			d := json.NewDecoder(conn)
+			for j := 0; j < msg_count; j++ {
+				var msg Msg
+				if err := d.Decode(&msg); err != nil {
+					return
 				}
-			}()
-			// Wait for entire message digest to sync
-			for j := 1; j <= msg_count; j++ {
-				<- sync_messages
 			}
 			finished <- conn
-		}()
+		}(i)
 	}
 
 	// Drain finished channel
 	for i := 1; i <= connection_count; i++ {
-		conn := <- finished
+		conn := <-finished
 		conn.Close()
 	}
 }
@@ -145,7 +141,12 @@ func TestSync(t *testing.T) {
 func TestIntegration(t *testing.T) {
 	flushDB()
 	setupRouter()
-	floodRouter(1, "foo", "bar", 100000)
+	var wg sync.WaitGroup
+	for i := 1; i <= 10; i++ {
+		wg.Add(1)
+		go func(i int) { floodRouter(i, "foo", "bar", 10000); wg.Done() }(i)
+	}
+	wg.Wait()
 }
 
 func BenchmarkThroughput(b *testing.B) {
