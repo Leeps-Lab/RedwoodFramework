@@ -164,12 +164,14 @@ func (r *Router) HandleMessage(msg *Msg) {
 		return
 	}
 	if msg.StateUpdate {
+		session.lock.Lock()
 		last_msgs, exists := session.last_state_update[msg.Key]
 		if !exists {
 			last_msgs = make(map[string]*Msg)
 			session.last_state_update[msg.Key] = last_msgs
 		}
 		last_msgs[msg.Sender] = msg
+		session.lock.Unlock()
 	}
 
 	sessionID := SessionID{instance: msg.Instance, id: msg.Session}

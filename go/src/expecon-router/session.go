@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,7 @@ type Session struct {
 	subjects          map[string]*Subject
 	last_state_update map[string]map[string]*Msg
 	last_cfg          *Msg
+	lock              sync.RWMutex
 }
 
 func NewSession(r *Router, instance string, id int) (s *Session) {

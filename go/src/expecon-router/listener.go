@@ -152,7 +152,9 @@ func (l *Listener) match(session *Session, msg *Msg) bool {
 	is_admin := l.subject.name == "admin"
 	same_period := msg.Period == l.subject.period || msg.Period == 0
 	same_group := msg.Group == l.subject.group || msg.Group == 0
+	session.lock.RLock()
 	last_state_update_msg := session.last_state_update[msg.Key][msg.Sender]
+	session.lock.RUnlock()
 	is_relevant := !msg.StateUpdate || msg.IdenticalTo(last_state_update_msg)
 
 	return control || (session_state && is_relevant && (is_admin || (same_period && same_group))) || (same_period && same_group && is_relevant)
