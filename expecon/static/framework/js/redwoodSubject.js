@@ -224,14 +224,14 @@ Redwood.factory("RedwoodSubject", ["$q", "$rootScope", "$timeout", "RedwoodCore"
 
 	rs.next_period = function(delay_secs) {
 		delay_secs = delay_secs || 0;
-		rs._enable_messaging = false;
+		rs._messaging_enabled = false;
 		rs.timeout(function(){
 			rw.send('_next_period');
 		}, delay_secs * 1000);
 	};
 
 	rs.on("_next_period", function() {
-		rs._enable_messaging = false;
+		rs._messaging_enabled = false;
 		rs.set("_accumulated_points", rs.accumulated_points);
 		rw.set_period(rs.period + 1);
 	});
